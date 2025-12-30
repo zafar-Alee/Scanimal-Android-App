@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Main App Theme -->
+    <style name="Theme.Scanimal" parent="Theme.Material3.DayNight.NoActionBar">
+    </style>
+
+    <!-- Splash Screen Base Theme -->
+    <style name="Theme.Scanimal.SplashScreen" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#1B5E20</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Scanimal</item>
+    </style>
+
+    <!-- Splash Theme -->
+    <style name="Theme.Scanimal.Splash" parent="Theme.Scanimal.SplashScreen"/>
+
+</resources>

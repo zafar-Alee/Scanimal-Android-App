@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "314930182780",
+    "project_id": "scanimal-21655",
+    "storage_bucket": "scanimal-21655.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314930182780:android:b64cf9d80498c14a7f67f9",
+        "android_client_info": {
+          "package_name": "com.kingree.scanimal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCZADZa3nyhMaTe1T3JSxpsb_NOBFKKho"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
