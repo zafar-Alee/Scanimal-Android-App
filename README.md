@@ -23,21 +23,37 @@ Built with **Kotlin**, **Jetpack Compose**, and **MVVM**, Scanimal is a multi-sc
 
 ---
 
-## 🏗️ Architecture
+app/
+├── manifests/
+│   └── AndroidManifest.xml
+│
+├── kotlin+java/
+│   └── com.kingree.scanimal/
+│
+│       ├── model/
+│       │   └── data/
+│       │       └── # DTOs, repositories, local models
+│       │
+│       ├── navigation/
+│       │   ├── AppNavGraph.kt        # Central navigation graph
+│       │   └── Screen.kt             # Route definitions / sealed classes
+│       │
+│       ├── ui.theme/                 # Colors, typography, shapes
+│       │
+│       ├── view/                     # Jetpack Compose screens
+│       │   ├── DashboardScreen.kt
+│       │   ├── IdentifyAnimalScreen.kt
+│       │   ├── LoginPage.kt
+│       │   ├── MainScreen.kt
+│       │   ├── ProfileScreen.kt
+│       │   ├── RegisterAnimalScreen.kt
+│       │   ├── SignUpScreen.kt
+│       │   └── SplashScreen.kt
+│       │
+│       ├── viewModel/                # ViewModels (state + logic)
+│       │
+│       └── MainActivity.kt            # App entry + NavHost
 
-**MVVM** + **Jetpack Compose** + **Navigation** - **View** (Compose 
-screens) → **ViewModel** (state, business logic) → **Model** (data 
-layer) - Unidirectional data flow, state hoisting, sealed UI states. 
-app/ ├── manifests/ │ └── AndroidManifest.xml ├── kotlin+java/ │ └── 
-com.kingree.scanimal/ │ ├── Model/ │ │ └── data/ # DTOs, repositories, 
-local models │ ├── navigation/ │ │ ├── AppNavGraph.kt # Central 
-navigation graph │ │ └── Screen/ # Route definitions / sealed classes │ 
-├── ui.theme/ # Color, typography, shapes │ ├── view/ # Compose screens 
-│ │ ├── DashboardScreen.kt │ │ ├── IdentifyAnimalScreen.kt │ │ ├── 
-login_page.kt │ │ ├── MainScreen.kt │ │ ├── ProfileScreen.kt │ │ ├── 
-RegisterAnimalScreen.kt │ │ ├── SignUpScreen.kt │ │ └── SplashScreen.kt 
-│ ├── viewModel/ # ViewModels │ └── MainActivity.kt # NavHost + app 
-entry
 ---
 
 ## 🧰 Tech Stack
@@ -61,6 +77,5 @@ entry
 
 ### Setup
 1. **Clone the repo**
-   ```bash
    git clone https://github.com/<your-org>/scanimal-android.git
    cd scanimal-android
