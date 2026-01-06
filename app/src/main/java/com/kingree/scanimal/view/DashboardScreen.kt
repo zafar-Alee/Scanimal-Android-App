@@ -41,7 +41,7 @@ fun DashboardScreen(
 
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", 0)
-    val name = prefs.getString("USER_NAME", "User")
+    val name = prefs.getString("USER_NAME", null)
 
     Scaffold(
         topBar = {
@@ -58,10 +58,11 @@ fun DashboardScreen(
                             color = Color.White
                         )
                         Text(
-                            text = name ?: "$name",
+                            text = if (!name.isNullOrBlank()) name else "User",
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.8f)
                         )
+
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -120,14 +120,13 @@ fun LoginScreen(
 
                             if (task.isSuccessful) {
 
+                                val savedName = prefs.getString(email.trim(), "User")
 
-                                val savedName = prefs.getString(email, null)
+                                // 🔑 FORCE SAVE USER_NAME EVERY TIME
+                                prefs.edit()
+                                    .putString("USER_NAME", savedName)
+                                    .apply()
 
-                                if (savedName != null) {
-                                    prefs.edit()
-                                        .putString("USER_NAME", savedName)
-                                        .apply()
-                                }
 
                                 onLoginSuccess()
                             } else {

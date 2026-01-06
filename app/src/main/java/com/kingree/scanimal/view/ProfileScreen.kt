@@ -33,7 +33,8 @@ fun ProfileScreen(navController: NavHostController) {
 
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", 0)
-    val name = prefs.getString("USER_NAME", "User")
+    val name = prefs.getString("USER_NAME", null)
+
 
 
     Scaffold(
@@ -80,11 +81,12 @@ fun ProfileScreen(navController: NavHostController) {
 
             // ------------------ USER NAME & ROLE ------------------
             Text(
-                text = name ?: "$name",
+                text = if (!name.isNullOrBlank()) name else "User",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1B5E20)
             )
+
             Text(
                 text = "Registered Owner",
                 fontSize = 14.sp,
