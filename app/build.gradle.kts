@@ -60,6 +60,11 @@ android {
         implementation(libs.androidx.compose.foundation.layout)
         implementation(libs.androidx.compose.foundation)
         implementation(libs.firebase.auth)
+        implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+        implementation("com.google.firebase:firebase-firestore-ktx")
+        implementation("com.google.firebase:firebase-storage-ktx")
+        implementation("com.google.firebase:firebase-auth-ktx")
+        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
         implementation(libs.androidx.navigation.runtime.ktx)
         implementation(libs.androidx.ui)
 

@@ -8,9 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -19,82 +20,78 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
+import com.google.firebase.auth.FirebaseAuth
+import com.kingree.scanimal.Model.AnimalRecord
 import com.kingree.scanimal.R
+import com.kingree.scanimal.repository.AnimalRepository
+import kotlinx.coroutines.launch
 
-// ------------------ DATA MODEL ------------------
-data class Animal(
-    val id: String,
-    val species: String,
-    val imageRes: Int,
-    val status: String
-)
-
-// ------------------ DASHBOARD SCREEN ------------------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    animals: List<Animal> = sampleAnimals,
     onIdentifyClick: () -> Unit = {},
     onVerifyClick: () -> Unit = {},
-    onAnimalClick: (Animal) -> Unit = {}
+    onAnimalClick: (AnimalRecord) -> Unit = {}
 ) {
-
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("user_prefs", 0)
-    val name = prefs.getString("USER_NAME", null)
+    val firebaseUser = FirebaseAuth.getInstance().currentUser
+
+    val name = when {
+        !firebaseUser?.displayName.isNullOrBlank() -> firebaseUser!!.displayName!!
+        !firebaseUser?.email.isNullOrBlank() && !prefs.getString(firebaseUser!!.email!!, null).isNullOrBlank() ->
+            prefs.getString(firebaseUser.email!!, "User")!!
+        !prefs.getString("USER_NAME", null).isNullOrBlank() ->
+            prefs.getString("USER_NAME", "User")!!
+        else -> "User"
+    }
+
+    var animals by remember { mutableStateOf<List<AnimalRecord>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Load animals for this user from Firestore
+    LaunchedEffect(firebaseUser?.uid) {
+        val uid = firebaseUser?.uid
+        if (uid == null) {
+            isLoading = false
+            return@LaunchedEffect
+        }
+        scope.launch {
+            val result = AnimalRepository.getAnimalsForUser(uid)
+            result.fold(
+                onSuccess = { animals = it },
+                onFailure = { errorMsg = it.message }
+            )
+            isLoading = false
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "Scanimal",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = if (!name.isNullOrBlank()) name else "User",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1B5E20)
-                )
-            )
-
-
-},
-        containerColor = Color(0xFFE8F5E9)
+            Box(
+                modifier = Modifier.fillMaxWidth().height(96.dp).background(Color(0xFF1B5E20)),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(start = 16.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text("Scanimal", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(name, fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f))
+                }
+            }
+        }
     ) { padding ->
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(12.dp)
+            modifier = Modifier.fillMaxSize().padding(padding).padding(12.dp)
         ) {
-
-            Text(
-                text = "Quick Actions",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1B5E20)
-            )
-
+            Text("Quick Actions", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
             Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 QuickActionCard(
                     title = "Identify Animal",
                     iconRes = R.drawable.baseline_content_paste_search_24,
@@ -102,7 +99,6 @@ fun DashboardScreen(
                     onClick = onIdentifyClick,
                     modifier = Modifier.weight(1f)
                 )
-
                 QuickActionCard(
                     title = "Verify Ownership",
                     iconRes = R.drawable.outline_check_box_24,
@@ -113,30 +109,39 @@ fun DashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Your Animals",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF1B5E20)
-            )
-
+            Text("Your Animals", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
             Spacer(modifier = Modifier.height(12.dp))
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(animals) { animal ->
-                    AnimalCard(
-                        animal = animal,
-                        onClick = { onAnimalClick(animal) }
-                    )
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFF22C55E))
+                    }
+                }
+                errorMsg != null -> {
+                    Text("Error: $errorMsg", color = Color.Red, fontSize = 13.sp)
+                }
+                animals.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🐾", fontSize = 48.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("No animals registered yet", color = Color.Gray, fontSize = 14.sp, textAlign = TextAlign.Center)
+                            Text("Register your first animal using the + tab", color = Color.Gray, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(animals) { animal ->
+                            AnimalCard(animal = animal, onClick = { onAnimalClick(animal) })
+                        }
+                    }
                 }
             }
         }
     }
 }
-
 
 // ------------------ QUICK ACTION CARD ------------------
 @Composable
@@ -148,33 +153,19 @@ fun QuickActionCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier
-            .height(110.dp)
-            .clickable { onClick() },
+        modifier = modifier.height(110.dp).clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = bgColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxSize().padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Image(
-                painter = painterResource(id = iconRes),
-                contentDescription = title,
-                modifier = Modifier.size(36.dp)
-            )
+            Image(painter = painterResource(id = iconRes), contentDescription = title, modifier = Modifier.size(36.dp))
             Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = title,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                fontSize = 14.sp
-            )
+            Text(text = title, color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, fontSize = 14.sp)
         }
     }
 }
@@ -182,45 +173,42 @@ fun QuickActionCard(
 // ------------------ ANIMAL CARD ------------------
 @Composable
 fun AnimalCard(
-    animal: Animal,
+    animal: AnimalRecord,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = animal.imageRes),
-                contentDescription = animal.species,
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(Color.LightGray, RoundedCornerShape(10.dp)),
-                contentScale = ContentScale.Crop
-            )
+            // Front image from Firebase Storage URL
+            if (animal.frontImageUrl.isNotBlank()) {
+                Image(
+                    painter = rememberAsyncImagePainter(animal.frontImageUrl),
+                    contentDescription = animal.name,
+                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(64.dp).background(Color(0xFFE8F5E9), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🐾", fontSize = 28.sp)
+                }
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = animal.species,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "ID: ${animal.id}",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
+                Text(text = animal.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Species: ${animal.species}", fontSize = 13.sp, color = Color.Gray)
+                Text(text = "ID: ${animal.animalId}", fontSize = 12.sp, color = Color.Gray)
             }
 
             StatusBadge(status = animal.status)
@@ -233,10 +221,9 @@ fun AnimalCard(
 fun StatusBadge(status: String) {
     val color = when (status) {
         "Verified" -> Color(0xFF1B5E20)
-        "Pending" -> Color(0xFFFFA000)
-        else -> Color.Gray
+        "Pending"  -> Color(0xFFFFA000)
+        else       -> Color.Gray
     }
-
     Text(
         text = status,
         color = Color.White,
@@ -247,17 +234,3 @@ fun StatusBadge(status: String) {
             .padding(horizontal = 10.dp, vertical = 6.dp)
     )
 }
-
-// ------------------ SAMPLE DATA ------------------
-val sampleAnimals = listOf(
-    Animal("A001", "Cow", R.drawable.cow_image, "Verified"),
-    Animal("A002", "Buffalo", R.drawable.buffalo_image, "Pending"),
-    Animal("A003", "Goat", R.drawable.goat_image, "Verified"),
-    Animal("A004", "Cow", R.drawable.cow_image, "Verified"),
-    Animal("A005", "Goat", R.drawable.goat_image, "Pending"),
-    Animal("A001", "Cow", R.drawable.cow_image, "Verified"),
-    Animal("A002", "Buffalo", R.drawable.buffalo_image, "Pending"),
-    Animal("A003", "Goat", R.drawable.goat_image, "Verified"),
-    Animal("A004", "Cow", R.drawable.cow_image, "Verified"),
-    Animal("A005", "Goat", R.drawable.goat_image, "Pending")
-)
