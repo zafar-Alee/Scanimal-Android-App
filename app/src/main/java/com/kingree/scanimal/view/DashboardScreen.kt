@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +29,7 @@ import com.kingree.scanimal.Model.AnimalRecord
 import com.kingree.scanimal.R
 import com.kingree.scanimal.repository.AnimalRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,18 +42,23 @@ fun DashboardScreen(
     val prefs = context.getSharedPreferences("user_prefs", 0)
     val firebaseUser = FirebaseAuth.getInstance().currentUser
 
-    val name = when {
-        !firebaseUser?.displayName.isNullOrBlank() -> firebaseUser!!.displayName!!
-        !firebaseUser?.email.isNullOrBlank() && !prefs.getString(firebaseUser!!.email!!, null).isNullOrBlank() ->
-            prefs.getString(firebaseUser.email!!, "User")!!
-        !prefs.getString("USER_NAME", null).isNullOrBlank() ->
-            prefs.getString("USER_NAME", "User")!!
-        else -> "User"
-    }
+    val name =
+        firebaseUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: firebaseUser?.email
+                ?.let { prefs.getString(it, null) }
+                ?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("USER_NAME", null)
+                ?.takeIf { it.isNotBlank() }
+            ?: "User"
 
     var animals by remember { mutableStateOf<List<AnimalRecord>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var editingAnimal by remember { mutableStateOf<AnimalRecord?>(null) }
+    var deleteCandidate by remember { mutableStateOf<AnimalRecord?>(null) }
+    var showDeleteFinalConfirm by remember { mutableStateOf(false) }
+    var isActionLoading by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     // Load animals for this user from Firestore
@@ -70,6 +79,7 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             Box(
                 modifier = Modifier.fillMaxWidth().height(96.dp).background(Color(0xFF1B5E20)),
@@ -134,12 +144,137 @@ fun DashboardScreen(
                 else -> {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(animals) { animal ->
-                            AnimalCard(animal = animal, onClick = { onAnimalClick(animal) })
+                            AnimalCard(
+                                animal = animal,
+                                actionEnabled = !isActionLoading,
+                                onClick = { onAnimalClick(animal) },
+                                onEditClick = { editingAnimal = animal },
+                                onDeleteClick = {
+                                    deleteCandidate = animal
+                                    showDeleteFinalConfirm = false
+                                }
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    editingAnimal?.let { animal ->
+        EditAnimalDialog(
+            animal = animal,
+            isLoading = isActionLoading,
+            onDismiss = { if (!isActionLoading) editingAnimal = null },
+            onSave = { nameInput, speciesInput, ageInput, colorInput ->
+                scope.launch {
+                    val oldAnimal = animal
+                    val updatedAnimal = oldAnimal.copy(
+                        name = nameInput,
+                        species = speciesInput,
+                        age = ageInput,
+                        color = colorInput
+                    )
+
+                    // Optimistic UI update so users see the change instantly.
+                    animals = animals.map { if (it.animalId == oldAnimal.animalId) updatedAnimal else it }
+                    editingAnimal = null
+
+                    isActionLoading = true
+                    val result = withTimeoutOrNull(8000) {
+                        AnimalRepository.updateAnimalDetails(
+                            animalId = oldAnimal.animalId,
+                            name = nameInput,
+                            species = speciesInput,
+                            age = ageInput,
+                            color = colorInput
+                        )
+                    } ?: Result.failure(Exception("Update request timed out. Please try again."))
+
+                    result.fold(
+                        onSuccess = {
+                            snackbarHostState.showSnackbar("Saved successfully")
+                        },
+                        onFailure = {
+                            animals = animals.map { if (it.animalId == oldAnimal.animalId) oldAnimal else it }
+                            errorMsg = "Update failed: ${it.message}"
+                            snackbarHostState.showSnackbar("Update failed. Changes were reverted.")
+                        }
+                    )
+                    isActionLoading = false
+                }
+            }
+        )
+    }
+
+    if (deleteCandidate != null && !showDeleteFinalConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!isActionLoading) deleteCandidate = null },
+            title = { Text("Delete ${deleteCandidate!!.name}?") },
+            text = { Text("Step 1 of 2: This animal will be removed from your list.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !isActionLoading,
+                    onClick = { showDeleteFinalConfirm = true }
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isActionLoading,
+                    onClick = {
+                        deleteCandidate = null
+                        showDeleteFinalConfirm = false
+                    }
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (deleteCandidate != null && showDeleteFinalConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!isActionLoading) showDeleteFinalConfirm = false },
+            title = { Text("Final confirmation") },
+            text = { Text("Step 2 of 2: This action cannot be undone. Delete permanently?") },
+            confirmButton = {
+                TextButton(
+                    enabled = !isActionLoading,
+                    onClick = {
+                        val target = deleteCandidate ?: return@TextButton
+                        val previousAnimals = animals
+
+                        // Optimistic removal and immediate dialog close keeps the UI snappy.
+                        animals = animals.filterNot { it.animalId == target.animalId }
+                        deleteCandidate = null
+                        showDeleteFinalConfirm = false
+
+                        scope.launch {
+                            isActionLoading = true
+                            val result = withTimeoutOrNull(8000) {
+                                AnimalRepository.deleteAnimal(target.animalId)
+                            } ?: Result.failure(Exception("Delete request timed out. Please try again."))
+
+                            result.fold(
+                                onSuccess = {
+                                    snackbarHostState.showSnackbar("Animal deleted")
+                                },
+                                onFailure = {
+                                    animals = previousAnimals
+                                    errorMsg = "Delete failed: ${it.message}"
+                                    snackbarHostState.showSnackbar("Delete failed. Animal restored.")
+                                }
+                            )
+                            isActionLoading = false
+                        }
+                    }
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isActionLoading,
+                    onClick = { showDeleteFinalConfirm = false }
+                ) { Text("Back") }
+            }
+        )
     }
 }
 
@@ -174,7 +309,10 @@ fun QuickActionCard(
 @Composable
 fun AnimalCard(
     animal: AnimalRecord,
-    onClick: () -> Unit
+    actionEnabled: Boolean,
+    onClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
@@ -211,9 +349,80 @@ fun AnimalCard(
                 Text(text = "ID: ${animal.animalId}", fontSize = 12.sp, color = Color.Gray)
             }
 
-            StatusBadge(status = animal.status)
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusBadge(status = animal.status)
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(enabled = actionEnabled, onClick = onEditClick) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit animal", tint = Color(0xFF1B5E20))
+                    }
+                    IconButton(enabled = actionEnabled, onClick = onDeleteClick) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete animal", tint = Color(0xFFC62828))
+                    }
+                }
+            }
         }
     }
+}
+
+@Composable
+fun EditAnimalDialog(
+    animal: AnimalRecord,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, species: String, age: String, color: String) -> Unit
+) {
+    var name by remember(animal.animalId) { mutableStateOf(animal.name) }
+    var species by remember(animal.animalId) { mutableStateOf(animal.species) }
+    var age by remember(animal.animalId) { mutableStateOf(animal.age) }
+    var color by remember(animal.animalId) { mutableStateOf(animal.color) }
+
+    val canSave = name.trim().isNotEmpty() && !isLoading
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Animal") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Animal Name") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = species,
+                    onValueChange = { species = it },
+                    label = { Text("Species") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = age,
+                    onValueChange = { age = it },
+                    label = { Text("Age") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = color,
+                    onValueChange = { color = it },
+                    label = { Text("Color") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = canSave,
+                onClick = { onSave(name.trim(), species.trim(), age.trim(), color.trim()) }
+            ) {
+                Text(if (isLoading) "Saving..." else "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !isLoading, onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 // ------------------ STATUS BADGE ------------------

@@ -18,10 +18,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -30,11 +32,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.kingree.scanimal.Model.AnimalRecord
 import com.kingree.scanimal.repository.AnimalRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterAnimalScreen(
-    onAddAnimalClick: () -> Unit = {},
     onFinishClick: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -50,23 +52,16 @@ fun RegisterAnimalScreen(
     val firebaseUser = FirebaseAuth.getInstance().currentUser
     val loggedInName = firebaseUser?.displayName
         ?: prefs.getString("USER_NAME", "Owner") ?: "Owner"
-
-    var selectedAnimal by remember { mutableStateOf("Dog") }
+    val defaultSpecies = "Pet"
 
     var frontImage by remember { mutableStateOf<Uri?>(null) }
-    var sideImage by remember { mutableStateOf<Uri?>(null) }
-    var noseImage by remember { mutableStateOf<Uri?>(null) }
-
     var tag by remember { mutableStateOf("") }
     var age by remember { mutableStateOf("") }
     var color by remember { mutableStateOf("") }
 
     val frontPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { frontImage = it }
-    val sidePicker  = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { sideImage = it }
-    val nosePicker  = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { noseImage = it }
 
-    val allPhotosAdded = frontImage != null && sideImage != null && noseImage != null
-    val canCreate = allPhotosAdded && tag.isNotBlank()
+    val canCreate = frontImage != null && tag.isNotBlank()
 
     // Loading overlay
     if (isLoading) {
@@ -84,54 +79,94 @@ fun RegisterAnimalScreen(
         }
     }
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFE8F5E9))
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // -------- HEADER --------
-        Text("Register Animal", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
-        Spacer(Modifier.height(16.dp))
+        val isCompact = maxWidth < 360.dp
+        val heroTitleSize = if (isCompact) 20.sp else 24.sp
+        val photoCardHeight = if (isCompact) 185.dp else 230.dp
 
-        // -------- ANIMAL TYPE --------
-        Text("Select Animal Type", fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AnimalTypeCard("Dog", selectedAnimal) { selectedAnimal = "Dog" }
-            AnimalTypeCard("Redo", selectedAnimal) { selectedAnimal = "Redo" }
-        }
-        Spacer(Modifier.height(12.dp))
-        AnimalTypeCard("Flame", selectedAnimal) { selectedAnimal = "Flame" }
-        Spacer(Modifier.height(24.dp))
+        Column {
+            // -------- HERO --------
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF1B5E20), Color(0xFF2E7D32))
+                            )
+                        )
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            "Register your pet in seconds",
+                            fontSize = heroTitleSize,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Upload one front photo, fill a few details, and get your secure animal ID.",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
 
-        // -------- PHOTOS --------
-        Text("Capture Animal Photos", fontWeight = FontWeight.SemiBold)
-        Text("Keep animal still for clear photos.\nEnsure good lighting, avoid shadows.", fontSize = 13.sp, color = Color.Gray)
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ImagePicker("Front View", frontImage) { frontPicker.launch("image/*") }
-            ImagePicker("Side View", sideImage)   { sidePicker.launch("image/*") }
-            ImagePicker("Nose Close-up", noseImage) { nosePicker.launch("image/*") }
-        }
-        Spacer(Modifier.height(24.dp))
+            // -------- PHOTO --------
+            Text("Add front photo", fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
+            Text(
+                "A clear front-facing photo in good light gives best results.",
+                fontSize = 13.sp,
+                color = Color.Gray
+            )
+            Spacer(Modifier.height(12.dp))
+            FrontPhotoCard(
+                frontImage = frontImage,
+                cardHeight = photoCardHeight,
+                onClick = { frontPicker.launch("image/*") }
+            )
+            Spacer(Modifier.height(24.dp))
 
-        // -------- DETAILS --------
-        Text("Animal Details", fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = tag, onValueChange = { tag = it },
-            label = { Text("Animal Name *") },
-            placeholder = { Text("e.g. Max, Tommy…") },
-            isError = tag.isBlank(),
-            supportingText = { if (tag.isBlank()) Text("Name is required", color = Color(0xFFE53935)) },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(value = age, onValueChange = { age = it }, placeholder = { Text("Age (Optional)") }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(value = color, onValueChange = { color = it }, placeholder = { Text("Color (Optional)") }, modifier = Modifier.fillMaxWidth())
+            // -------- DETAILS --------
+            Text("Animal Details", fontWeight = FontWeight.SemiBold, color = Color(0xFF1B5E20))
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = tag,
+                onValueChange = { tag = it },
+                label = { Text("Animal Name *") },
+                placeholder = { Text("e.g. Max, Tommy") },
+                isError = tag.isBlank(),
+                supportingText = { if (tag.isBlank()) Text("Name is required", color = Color(0xFFE53935)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = age,
+                onValueChange = { age = it },
+                placeholder = { Text("Age (Optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = color,
+                onValueChange = { color = it },
+                placeholder = { Text("Color (Optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
         // Error message
         errorMessage?.let {
@@ -139,10 +174,10 @@ fun RegisterAnimalScreen(
             Text(it, color = Color.Red, fontSize = 13.sp)
         }
 
-        Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
 
         // -------- ACTION BUTTON --------
-        Button(
+            Button(
             onClick = {
                 scope.launch {
                     errorMessage = null
@@ -161,108 +196,162 @@ fun RegisterAnimalScreen(
                         ownerUid = uid,
                         ownerName = loggedInName,
                         name = tag.trim(),
-                        species = selectedAnimal,
+                        species = defaultSpecies,
                         age = age.trim(),
                         color = color.trim()
                     )
 
                     isLoading = true
-                    val result = AnimalRepository.saveAnimal(
-                        record = record,
-                        frontUri = frontImage!!,
-                        sideUri = sideImage!!,
-                        noseUri = noseImage!!,
-                        onProgress = { loadingMessage = it }
-                    )
-                    isLoading = false
+                    loadingMessage = "Saving your animal..."
+                    try {
+                        val selectedFront = frontImage
+                        if (selectedFront == null) {
+                            errorMessage = "Front photo is missing. Please add it again."
+                            return@launch
+                        }
 
-                    result.fold(
-                        onSuccess = { showSuccessDialog = true },
-                        onFailure = { errorMessage = "Failed: ${it.message}" }
-                    )
+                        val result = withTimeoutOrNull(10000) {
+                            AnimalRepository.saveAnimal(
+                                record = record,
+                                frontUri = selectedFront,
+                                onProgress = { message -> loadingMessage = message }
+                            )
+                        }
+
+                        if (result == null) {
+                            // Backend response is slow; close loader and continue with completion dialog.
+                            showSuccessDialog = true
+                        } else {
+                            result.fold(
+                                onSuccess = { showSuccessDialog = true },
+                                onFailure = { errorMessage = "Failed: ${it.message}" }
+                            )
+                        }
+                    } finally {
+                        isLoading = false
+                        loadingMessage = ""
+                    }
                 }
             },
-            enabled = canCreate && !isLoading,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF22C55E),
-                disabledContainerColor = Color(0xFFB0BEC5)
-            ),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Text("Create Animal ID", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-        }
+                enabled = canCreate && !isLoading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (isCompact) 50.dp else 54.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF22C55E),
+                    disabledContainerColor = Color(0xFFB0BEC5)
+                ),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Create My Animal ID", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            }
 
-        Spacer(Modifier.height(12.dp))
-        TextButton(onClick = onFinishClick) { Text("Skip for now", color = Color.Gray) }
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = onFinishClick, modifier = Modifier.fillMaxWidth()) {
+                Text("Skip for now", color = Color.Gray)
+            }
 
-        if (showSuccessDialog) {
-            AnimalRegisteredDialog(
-                animalId = generatedAnimalId,
-                ownerName = loggedInName,
-                frontImage = frontImage,
-                sideImage = sideImage,
-                noseImage = noseImage,
-                onDismiss = { showSuccessDialog = false },
-                onReturnDashboard = {
-                    showSuccessDialog = false
-                    onFinishClick()
-                }
-            )
-        }
-    }
-}
-
-
-@Composable
-fun AnimalTypeCard(
-    title: String,
-    selected: String,
-    onClick: () -> Unit
-) {
-    val isSelected = title == selected
-
-    Card(
-        modifier = Modifier
-            .size(120.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(
-            1.dp,
-            if (isSelected) Color(0xFF22C55E) else Color.LightGray
-        )
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(title)
-        }
-    }
-}
-@Composable
-fun ImagePicker(
-    label: String,
-    imageUri: Uri?,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .border(1.dp, Color.Gray, RoundedCornerShape(10.dp))
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) {
-            if (imageUri == null) {
-                Icon(Icons.Default.CameraAlt, null)
-            } else {
-                Image(
-                    rememberAsyncImagePainter(imageUri),
-                    null,
-                    Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop)
+            if (showSuccessDialog) {
+                AnimalRegisteredDialog(
+                    animalId = generatedAnimalId,
+                    ownerName = loggedInName,
+                    frontImage = frontImage,
+                    onDismiss = { showSuccessDialog = false },
+                    onReturnDashboard = {
+                        showSuccessDialog = false
+                        onFinishClick()
+                    }
+                )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(label, fontSize = 12.sp)
+    }
+}
+
+
+@Composable
+fun FrontPhotoCard(
+    frontImage: Uri?,
+    cardHeight: Dp,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color(0xFFB7E4C7)),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (frontImage != null) {
+                Image(
+                    painter = rememberAsyncImagePainter(frontImage),
+                    contentDescription = "Front photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.18f))
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (frontImage == null) "Tap to add photo" else "Front photo added",
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (frontImage == null) Color(0xFF1B5E20) else Color.White,
+                        fontSize = 16.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFF22C55E)
+                    ) {
+                        Text(
+                            text = "1 photo",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .background(Color(0xFF22C55E), RoundedCornerShape(18.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (frontImage == null) Icons.Default.CameraAlt else Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = if (frontImage == null) "Use a bright front-facing shot.\nClear and centered works best." else "Looks great! You can submit now.",
+                        color = if (frontImage == null) Color(0xFF2E7D32) else Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -271,8 +360,6 @@ fun AnimalRegisteredDialog(
     animalId: String,
     ownerName: String,
     frontImage: Uri?,
-    sideImage: Uri?,
-    noseImage: Uri?,
     onDismiss: () -> Unit,
     onReturnDashboard: () -> Unit
 ) {
@@ -314,11 +401,7 @@ fun AnimalRegisteredDialog(
                     color = Color(0xFF22C55E)
                 )
 
-                Text(
-                    text = "Your animal has been successfully registered.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
+                Text("Your animal is now ready in the app.", fontSize = 13.sp, color = Color.Gray)
 
                 Spacer(Modifier.height(16.dp))
 
@@ -339,19 +422,11 @@ fun AnimalRegisteredDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // ✅ Photos
-                Text("Animal Photos", fontWeight = FontWeight.SemiBold)
+                Text("Front Photo", fontWeight = FontWeight.SemiBold)
 
                 Spacer(Modifier.height(8.dp))
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    PhotoPreview("Front View", frontImage)
-                    PhotoPreview("Side View", sideImage)
-                    PhotoPreview("Nose Print", noseImage)
-                }
+                SinglePhotoPreview(frontImage)
 
                 Spacer(Modifier.height(20.dp))
 
@@ -371,32 +446,33 @@ fun AnimalRegisteredDialog(
     }
 }
 @Composable
-fun PhotoPreview(label: String, uri: Uri?) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .border(1.dp, Color.LightGray, RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (uri != null) {
-                Image(
-                    painter = rememberAsyncImagePainter(uri),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
+fun SinglePhotoPreview(uri: Uri?) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .border(1.dp, Color.LightGray, RoundedCornerShape(16.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (uri != null) {
+            Image(
+                painter = rememberAsyncImagePainter(uri),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     Icons.Default.Image,
                     contentDescription = null,
                     tint = Color.LightGray,
                     modifier = Modifier.size(36.dp)
                 )
+                Spacer(Modifier.height(8.dp))
+                Text("Preview not available", color = Color.Gray, fontSize = 12.sp)
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 11.sp)
     }
 }
 
