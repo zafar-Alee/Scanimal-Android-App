@@ -8,7 +8,6 @@ Built with **Kotlin**, **Jetpack Compose**, and **MVVM**, Scanimal is a multi-sc
 !Jetpack Compose
 !Android
 !License: MIT
-
 ---
 
 ## ✨ Key Features
