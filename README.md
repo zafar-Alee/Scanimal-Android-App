@@ -1,5 +1,5 @@
 
-# 🐾 Scanimal (Android)
+# 🐾 Scanimal 
 
 Identify animals and collect their data—fast, accurate, and delightful.  
 Built with **Kotlin**, **Jetpack Compose**, and **MVVM**, Scanimal is a multi-screen Android app featuring onboarding, authentication, animal identification, registration, profiles, and a dashboard.  
